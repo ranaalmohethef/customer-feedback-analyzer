@@ -2,13 +2,15 @@
 
 An applied NLP prototype for Arabic app-review classification and sentiment analysis, with exploratory clustering of an additional multilingual review source.
 
+**Course:** Applied NLP capstone, [SDAIA Academy](https://github.com/SDAIAAcademy) · **Use case:** 3, Voice of Customer Analyzer
+
 ## Problem and scope
 
 App reviews mix bugs, feature requests, praise, and unrelated content. This project helps reviewers organize feedback and inspect aggregate predictions. Outputs support human review; they are not guaranteed decisions.
 
 - Arabic topic classification: `bug_report`, `improvement_request`, `rating`, `others`.
 - Arabic binary sentiment: `negative`, `positive` (no neutral or mixed class).
-- Local Gradio demo: one review or up to 100 newline-separated reviews, Arabic or English.
+- Local Gradio demo with an Arabic / English interface: one review or up to 100 newline-separated reviews. When the model is not confident, it answers "Not sure" instead of guessing.
 - Exploration tab: shows clusters of a 3,000-review sample from user_quality, with example reviews, and semantic search over that sample. This is exploratory, not an English classification benchmark.
 - Experimental English sentiment, trained on star-derived labels. Topic classification is Arabic only.
 
@@ -60,6 +62,17 @@ The encoder is frozen: training the classifier **is not encoder fine-tuning**. S
 ### Experimental English sentiment
 
 Trained on a 12,000-review sample of user_quality with labels derived from stars (1–2 negative, 4–5 positive, 3 excluded). Rows were kept only if they contained Latin letters and no Arabic letters; this is not verified English. 1,454 text groups with conflicting star labels were excluded. Split 8,375 / 1,783 / 1,842 by hash. Selected on validation: embedding weight 1, C=1.
+
+### Low-confidence abstention (`choose_thresholds.py`)
+
+The app answers "Not sure — needs human review" when the top predicted probability is below a threshold. The rule was fixed before looking at results: abstain on the least confident 10% of **validation** reviews. Test data was not used.
+
+| Task | Threshold | Accuracy (all validation) | Accuracy when answering | Accuracy on abstained |
+|---|---:|---:|---:|---:|
+| Arabic topic | 0.493 | 72.05% | 74.93% | 46.15% |
+| Arabic sentiment | 0.583 | 87.21% | 90.46% | 58.02% |
+
+On abstained sentiment reviews the model was close to a coin flip (58%), so abstaining removes mostly unreliable answers. Abstention does not catch confident errors: `التطبيق خيالي` is still predicted negative. English sentiment has no threshold.
 
 ### Exploratory clustering
 
@@ -164,6 +177,7 @@ For a fresh reproduction:
 .\.venv\Scripts\python.exe train_sentiment.py
 .\.venv\Scripts\python.exe explore_english.py
 .\.venv\Scripts\python.exe upgrade_models.py
+.\.venv\Scripts\python.exe choose_thresholds.py
 .\.venv\Scripts\python.exe check_app.py
 .\.venv\Scripts\python.exe app.py
 ```
@@ -193,6 +207,7 @@ Model binaries, raw data, processed data, embeddings, and `.venv` are excluded f
 | `train_sentiment.py` | Sentiment selection and test evaluation |
 | `explore_english.py` | Additional-source clustering |
 | `upgrade_models.py` | Sentiment v2 (Arabic) and experimental English sentiment |
+| `choose_thresholds.py` | "Not sure" thresholds chosen on validation |
 | `check_app.py` | Automated app checks and sample outputs |
 | `app.py` | Local Gradio demo |
 | `reports/` | Metrics, predictions, error analysis, clustering summaries |
@@ -220,6 +235,20 @@ After the version 2 upgrade, before the English topic output was removed:
 | Please add dark mode | others (experimental) | positive (experimental) | English topic error; expected improvement_request |
 
 An earlier version also guessed English topics by similarity to category descriptions. It was never evaluated and failed on simple examples (above), so it was removed from the demo. English input now gets sentiment only.
+
+Current app, with abstention (`reports/upgrade_ui_examples.csv`):
+
+| Input | Predicted topic | Predicted sentiment |
+|---|---|---|
+| التطبيق خيالي | rating | negative (confident error) |
+| مشكور والله ما قصرتو | rating | not sure |
+| ليس جميل نيمو أفضل منه | rating | positive (error) |
+| ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive |
+| The app is amazing | — | positive (experimental) |
+| The app crashes every time I open it | — | negative (experimental) |
+| Please add dark mode | — | positive (experimental) |
+
+The same meaning can get different results: `اكل لذيذ` is positive, but `لذيذ الاكل` is "not sure", because the word model treats `الاكل` and `اكل` as different tokens and learned `الاكل` as negative from delivery complaints.
 
 ## Presentation and remaining release checks
 
