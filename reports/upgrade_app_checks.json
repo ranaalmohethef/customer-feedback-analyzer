@@ -1,10 +1,10 @@
 [
   {
-    "check": "Empty input clears output",
+    "check": "Empty input",
     "passed": true
   },
   {
-    "check": "Long input handled",
+    "check": "Long input",
     "passed": true
   },
   {
@@ -12,11 +12,15 @@
     "passed": true
   },
   {
-    "check": "English experimental inference",
+    "check": "English sentiment only",
     "passed": true
   },
   {
     "check": "Mixed batch",
+    "passed": true
+  },
+  {
+    "check": "Result card",
     "passed": true
   },
   {

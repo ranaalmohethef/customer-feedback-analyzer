@@ -1,6 +1,0 @@
-﻿review,human_interpretation,prediction,note,score_negative,score_positive
-التطبيق خيالي,positive,negative,"Diagnostic examples, not independent test accuracy; scores are not calibrated confidence.",0.6380768158495258,0.3619231841504742
-مشكور والله ما قصرتو,positive,negative,"Diagnostic examples, not independent test accuracy; scores are not calibrated confidence.",0.586185640756574,0.4138143592434261
-ليس جميل نيمو أفضل منه,negative,positive,"Diagnostic examples, not independent test accuracy; scores are not calibrated confidence.",0.41963994969699214,0.5803600503030079
-التطبيق مفيد ولكن يحتاج بعض التحسينات,mixed,positive,"Diagnostic examples, not independent test accuracy; scores are not calibrated confidence.",0.40366455599692774,0.5963354440030723
-ما اعجبتني الواجهه بس التطبيق مفيد,mixed,positive,"Diagnostic examples, not independent test accuracy; scores are not calibrated confidence.",0.31120687588771,0.68879312411229

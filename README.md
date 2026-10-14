@@ -10,7 +10,7 @@ App reviews mix bugs, feature requests, praise, and unrelated content. This proj
 - Arabic binary sentiment: `negative`, `positive` (no neutral or mixed class).
 - Local Gradio demo: one review or up to 100 newline-separated reviews, Arabic or English.
 - Exploration tab: shows clusters of a 3,000-review sample from user_quality, with example reviews, and semantic search over that sample. This is exploratory, not an English classification benchmark.
-- Experimental English path: English sentiment trained on star-derived labels, and English topic by similarity to category descriptions. The English topic output has not been evaluated.
+- Experimental English sentiment, trained on star-derived labels. Topic classification is Arabic only.
 
 ## Data
 
@@ -207,7 +207,7 @@ These are actual UI observations, including failures, not expected labels substi
 | التطبيق مفيد ولكن يحتاج بعض التحسينات | improvement_request | positive | Praise plus improvement request |
 | ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive | Mixed sentiment reduced to a binary output |
 
-After the version 2 upgrade (`reports/upgrade_ui_examples.csv`):
+After the version 2 upgrade, before the English topic output was removed:
 
 | Input | Predicted topic | Predicted sentiment | Interpretation |
 |---|---|---|---|
@@ -219,7 +219,7 @@ After the version 2 upgrade (`reports/upgrade_ui_examples.csv`):
 | The app crashes every time I open it | bug_report (experimental) | negative (experimental) | Plausible |
 | Please add dark mode | others (experimental) | positive (experimental) | English topic error; expected improvement_request |
 
-The unevaluated English topic output fails on simple examples. Treat it as a demonstration of the limitation, not a supported feature.
+An earlier version also guessed English topics by similarity to category descriptions. It was never evaluated and failed on simple examples (above), so it was removed from the demo. English input now gets sentiment only.
 
 ## Presentation and remaining release checks
 

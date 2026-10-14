@@ -1,191 +1,180 @@
+"""صوت العميل — Gradio demo for Arabic app-review analysis."""
 from pathlib import Path
-
-import re
-
-import time
-import hashlib
-import json
 from functools import lru_cache
-
-import numpy as np
+import hashlib
+import html
+import re
+import time
 
 import gradio as gr
-
 import joblib
-
+import numpy as np
 import pandas as pd
-
 from scipy.sparse import csr_matrix, hstack
-
 from sentence_transformers import SentenceTransformer
 
 ROOT = Path(__file__).resolve().parent
-
 MODELS = ROOT / "models"
 REPORTS = ROOT / "reports"
 CACHE = ROOT / "Data" / "embedding_cache"
 
 TOPICS = {
-
     "bug_report": "بلاغ خلل",
-
     "improvement_request": "طلب تحسين",
-
     "rating": "تقييم عام",
-
     "others": "أخرى",
-
 }
+SENTIMENTS = {"positive": "إيجابي", "negative": "سلبي"}
 
-SENTIMENTS = {
-
-    "positive": "إيجابي",
-
-    "negative": "سلبي",
-
-}
-
-required_models = ["hybrid_classifier.joblib", "sentiment_classifier.joblib", "multilingual_encoder"]
-missing = [name for name in required_models if not (MODELS / name).exists()]
+# ---------------------------------------------------------------- models
+required = ["hybrid_classifier.joblib", "sentiment_classifier.joblib", "multilingual_encoder"]
+missing = [name for name in required if not (MODELS / name).exists()]
 if missing:
     raise FileNotFoundError("Missing local models: " + ", ".join(missing))
 
 print("Loading saved models...")
-
 hybrid = joblib.load(MODELS / "hybrid_classifier.joblib")
+sentiment_v1 = joblib.load(MODELS / "sentiment_classifier.joblib")
+encoder = SentenceTransformer(str(MODELS / "multilingual_encoder"), device="cpu")
 
-sentiment = joblib.load(MODELS / "sentiment_classifier.joblib")
-
-encoder = SentenceTransformer(
-
-    str(MODELS / "multilingual_encoder"),
-
-    device="cpu",
-
-)
-
-ARABIC_LETTERS = re.compile(r"[\u0621-\u063A\u0641-\u064A]")
 
 def load_optional(name):
     path = MODELS / name
     return joblib.load(path) if path.exists() else None
 
+
 ar_v2 = load_optional("sentiment_ar_v2.joblib")
 en_v2 = load_optional("sentiment_en_v2.joblib")
 
-
-def language_route(text):
-    arabic = len(ARABIC_LETTERS.findall(text))
-    latin = len(re.findall(r"[A-Za-z]", text))
-    if arabic:
-        return "ar", "نص مختلط؛ استُخدم مسار العربي." if latin else ""
-    if latin:
-        return "en", "المسار الإنجليزي تجريبي؛ فحص الحروف لا يتحقق من اللغة."
-    return "unsupported", "لم نحدد نصًا عربيًا أو لاتينيًا قابلًا للتحليل."
+ARABIC = re.compile(r"[ء-غف-ي]")
+LATIN = re.compile(r"[A-Za-z]")
+MAX_CHARS = 3000
+MAX_BATCH = 100
 
 
 def sentiment_predict(bundle, texts, vectors):
     if bundle["kind"] == "baseline":
         return bundle["pipeline"].predict(texts)
-    features = hstack([bundle["word"].transform(texts),
-                      bundle["char"].transform(texts)*0.5,
-                      csr_matrix(vectors*bundle["embedding_weight"])], format="csr")
+    features = hstack([
+        bundle["word"].transform(texts),
+        bundle["char"].transform(texts) * 0.5,
+        csr_matrix(vectors * bundle["embedding_weight"]),
+    ], format="csr")
     return bundle["classifier"].predict(features)
 
 
-@lru_cache(maxsize=1)
-def topic_prototypes():
-    descriptions = [
-        "A user reports a technical bug: the app crashes, freezes, fails to load or cannot log in.",
-        "A user requests a new feature, an improvement, or a change to the application.",
-        "A user gives a general rating, praise, or criticism of the application.",
-        "An unrelated message, a greeting, or a question without a clear app review.",
-    ]
-    return encoder.encode(descriptions, normalize_embeddings=True, convert_to_numpy=True)
-
-
 def predict_reviews(texts):
+    """Arabic: evaluated topic + sentiment. English: experimental sentiment only."""
     vectors = encoder.encode(texts, batch_size=16, convert_to_numpy=True,
                              normalize_embeddings=True, show_progress_bar=False)
-    records=[]
-    for i,text in enumerate(texts):
-        lang, note=language_route(text)
-        if lang == "unsupported":
-            records.append({"التعليق":text,"نوع التعليق":"غير مدعوم","المشاعر":"غير متاحة","ملاحظات":note})
-            continue
-        v=vectors[i:i+1]
-        if lang == "ar":
-            features=hstack([hybrid["vectorizer"].transform([text]),
-                csr_matrix(v*hybrid["embedding_weight"])],format="csr")
-            topic=TOPICS[hybrid["classifier"].predict(features)[0]]
-            label=sentiment_predict(ar_v2,[text],v)[0] if ar_v2 else sentiment.predict([text])[0]
-            feeling=SENTIMENTS[label]
-            note += " المشاعر ثنائية؛ التعليق المختلط أو المحايد قد يحتاج مراجعة."
+    rows = []
+    for i, text in enumerate(texts):
+        v = vectors[i:i + 1]
+        if ARABIC.search(text):
+            features = hstack([hybrid["vectorizer"].transform([text]),
+                               csr_matrix(v * hybrid["embedding_weight"])], format="csr")
+            topic = TOPICS[hybrid["classifier"].predict(features)[0]]
+            label = sentiment_predict(ar_v2, [text], v)[0] if ar_v2 else sentiment_v1.predict([text])[0]
+            feeling = SENTIMENTS[label]
+            note = "نص مختلط؛ حُلّل كعربي." if LATIN.search(text) else ""
+        elif LATIN.search(text) and en_v2:
+            topic = "—"
+            feeling = SENTIMENTS[sentiment_predict(en_v2, [text], v)[0]] + " (تجريبي)"
+            note = "الإنجليزي: المشاعر فقط، وهي تجريبية. نوع التعليق للعربي فقط."
         else:
-            # Transparent zero-shot semantic matching; no claim of English topic accuracy.
-            index=int(np.argmax(v @ topic_prototypes().T))
-            topic=TOPICS[list(TOPICS)[index]] + " (تجريبي)"
-            feeling=SENTIMENTS[sentiment_predict(en_v2,[text],v)[0]] + " (تجريبي)" if en_v2 else "غير جاهز: شغّلي upgrade_models.py"
-            note += " النوع تشابه مع أوصاف الفئات ولم يُقيّم؛ المشاعر تعلمت من النجوم لا من وسوم نصية بشرية."
-        tokens=encoder.tokenizer(text, truncation=False, add_special_tokens=True)["input_ids"]
-        if len(tokens)>encoder.max_seq_length:
-            note += " النص يتجاوز حد Encoder؛ التمثيل الدلالي يستخدم بدايته فقط."
-        records.append({"التعليق":text,"نوع التعليق":topic,"المشاعر":feeling,"ملاحظات":note.strip()})
-    return pd.DataFrame(records)
+            topic, feeling = "—", "—"
+            note = "اكتبي التعليق بالعربي."
+        rows.append({"التعليق": text, "نوع التعليق": topic, "المشاعر": feeling, "ملاحظات": note})
+    return pd.DataFrame(rows)
 
 
+# ---------------------------------------------------------------- analysis
 def analyze_one(text):
-    text=(text or "").strip()
+    text = (text or "").strip()
     if not text:
         return "—", "—", "اكتبي تعليقًا أولًا."
-    if len(text)>3000:
-        return "—", "—", "الحد الأقصى 3000 حرف؛ اختصري النص ثم أعيدي التحليل."
-    start=time.perf_counter()
-    result=predict_reviews([text]).iloc[0]
-    return result["نوع التعليق"],result["المشاعر"],f"{time.perf_counter()-start:.2f} ثانية. " + result["ملاحظات"]
+    if len(text) > MAX_CHARS:
+        return "—", "—", f"الحد الأقصى {MAX_CHARS} حرف."
+    start = time.perf_counter()
+    row = predict_reviews([text]).iloc[0]
+    note = f"{time.perf_counter() - start:.2f} ثانية"
+    if row["ملاحظات"]:
+        note += " · " + row["ملاحظات"]
+    return row["نوع التعليق"], row["المشاعر"], note
 
 
 def analyze_batch(text):
-    texts=[t.strip() for t in (text or "").splitlines() if t.strip()]
-    empty=pd.DataFrame(columns=["التعليق","نوع التعليق","المشاعر","ملاحظات"])
+    texts = [t.strip() for t in (text or "").splitlines() if t.strip()]
+    empty = pd.DataFrame(columns=["التعليق", "نوع التعليق", "المشاعر", "ملاحظات"])
     if not texts:
-        return empty,"ضعي كل تعليق في سطر مستقل."
-    if len(texts)>100 or any(len(t)>3000 for t in texts):
-        return empty,"الحد 100 تعليق، وكل تعليق لا يتجاوز 3000 حرف."
-    result=predict_reviews(texts)
-    counts=result["المشاعر"].value_counts()
-    topic_counts=result["نوع التعليق"].value_counts()
-    summary=f"**عدد التعليقات: {len(result)}**\n\n**المشاعر المتوقعة:**\n\n"
-    summary+="\n".join(f"- {label}: {count}" for label,count in counts.items())
-    summary+="\n\n**أنواع التعليقات المتوقعة:**\n\n"
-    summary+="\n".join(f"- {label}: {count}" for label,count in topic_counts.items())
-    summary+="\n\nنتائج متوقعة وليست حقائق مؤكدة. النتائج الإنجليزية التجريبية مفصولة بالاسم عن العربية."
-    return result,summary
+        return empty, "ضعي كل تعليق في سطر مستقل."
+    if len(texts) > MAX_BATCH or any(len(t) > MAX_CHARS for t in texts):
+        return empty, f"الحد {MAX_BATCH} تعليق، وكل تعليق لا يتجاوز {MAX_CHARS} حرف."
+    result = predict_reviews(texts)
+    return result, summary_html(result)
 
 
-def active_metrics():
-    sections=["### النسخة المستخدمة وحدود التقييم",
-        "نوع التعليق العربي: Hybrid الأصلي؛ Accuracy 69.18% وMacro-F1 62.64% على 451 تعليقًا."]
-    for prefix,title in [("sentiment_ar","المشاعر العربية"),("sentiment_en","المشاعر الإنجليزية التجريبية")]:
-        path=REPORTS/f"{prefix}_v2_metrics.json"
-        if path.exists():
-            report=json.loads(path.read_text(encoding="utf-8"))
-            metric=report["test_metrics"]
-            sections.append(f"**{title}**: Validation Macro-F1={report['validation_macro_f1']:.3f}؛ "
-                f"الاختبار المسجل ({report['test_rows']}): Accuracy={metric['accuracy']:.3f}، Macro-F1={metric['macro_f1']:.3f}.")
-        else:
-            sections.append(f"**{title}**: تقرير التحديث غير موجود.")
-    sections.extend(["العربي: أعدنا استخدام اختبار سبق فحص أخطائه؛ النتيجة وصفية وليست اختبارًا مستقلًا جديدًا.",
-        "الإنجليزي: المقاييس تقيس التوافق مع وسوم مشتقة من النجوم، وليست دقة مثبتة لمشاعر النص. اللغة غير متحققة لكل صف.",
-        "نوع التعليق الإنجليزي يعتمد تشابه النص مع أوصاف الفئات؛ لم نقس دقته. لا توجد فئة مشاعر مختلط أو محايد.",
-        "إذا لم تُدرّب النسخة الجديدة فالعربي يستخدم نموذج المشاعر القديم: Accuracy 85.95% وMacro-F1 85.92%."])
-    return "\n\n".join(sections)
+# ---------------------------------------------------------------- HTML views
+def tone(sentiment):
+    if sentiment.startswith("إيجابي"):
+        return "pos"
+    if sentiment.startswith("سلبي"):
+        return "neg"
+    return "muted"
 
 
+def result_card(text):
+    topic, feeling, note = analyze_one(text)
+    if topic == "—" and feeling == "—":
+        return f'<div class="card empty">{html.escape(note)}</div>'
+    return f"""
+    <div class="card">
+      <div class="stat"><span class="label">نوع التعليق</span>
+        <span class="value">{html.escape(topic)}</span></div>
+      <div class="stat"><span class="label">المشاعر</span>
+        <span class="pill {tone(feeling)}">{html.escape(feeling)}</span></div>
+      <div class="note">{html.escape(note)}</div>
+    </div>"""
+
+
+def bars(counts, total, css=""):
+    rows = []
+    for label, count in counts.items():
+        pct = 100 * count / total
+        rows.append(f"""
+        <div class="bar-row">
+          <span class="bar-label">{html.escape(str(label))}</span>
+          <span class="bar"><span class="fill {css or tone(str(label))}" style="width:{pct:.0f}%"></span></span>
+          <span class="bar-count">{count}</span>
+        </div>""")
+    return "".join(rows)
+
+
+def summary_html(result):
+    total = len(result)
+    feelings = result["المشاعر"].value_counts()
+    topics = result.loc[result["نوع التعليق"] != "—", "نوع التعليق"].value_counts()
+    topic_block = bars(topics, total, "accent") if len(topics) else '<p class="muted-text">لا يوجد تعليق عربي.</p>'
+    return f"""
+    <div class="summary">
+      <div class="card"><h4>المشاعر</h4>{bars(feelings, total)}</div>
+      <div class="card"><h4>أنواع التعليقات</h4>{topic_block}</div>
+    </div>
+    <p class="muted-text">{total} تعليق · نتائج متوقعة من النموذج وليست مؤكدة.</p>"""
+
+
+def batch_ui(text):
+    result, summary = analyze_batch(text)
+    if result.empty:
+        return result, f'<div class="card empty">{html.escape(summary)}</div>'
+    return result, summary
+
+
+# ---------------------------------------------------------------- exploration
 def read_report(name, columns):
     path = REPORTS / name
     if not path.exists():
-        raise gr.Error(f"ملف مطلوب غير موجود: reports/{name}. شغّلي explore_english.py أولًا ثم أعيدي ملف الملخص المراجع.")
+        raise gr.Error(f"الملف غير موجود: reports/{name}")
     frame = pd.read_csv(path).fillna("")
     if not set(columns).issubset(frame.columns):
         raise gr.Error(f"أعمدة غير متوقعة في {name}")
@@ -193,22 +182,20 @@ def read_report(name, columns):
 
 
 def load_exploration():
-    summary = read_report("english_cluster_summary.csv", ["cluster", "review_count", "keywords", "suggested_topic_manual", "review_notes"])
-    examples = read_report("english_cluster_examples.csv", ["cluster", "example_type", "review"])
-    shown = summary[["cluster", "review_count", "suggested_topic_manual", "keywords", "review_notes"]].copy()
-    shown.columns = ["المجموعة", "العدد", "الموضوع المقترح", "الكلمات البارزة", "ملاحظات المراجعة"]
-    samples = examples[["cluster", "example_type", "review"]].copy()
-    samples.columns = ["المجموعة", "اختيار المثال", "التعليق"]
+    summary = read_report("english_cluster_summary.csv",
+                          ["cluster", "review_count", "keywords", "suggested_topic_manual"])
+    examples = read_report("english_cluster_examples.csv", ["cluster", "review"])
+    shown = summary[["cluster", "suggested_topic_manual", "review_count", "keywords"]].copy()
+    shown.columns = ["المجموعة", "الموضوع", "العدد", "الكلمات البارزة"]
+    samples = examples[["cluster", "review"]].copy()
+    samples.columns = ["المجموعة", "مثال"]
     return shown, samples
 
 
 @lru_cache(maxsize=1)
 def search_index(file_signature):
-    # Signature changes invalidate in-memory caching when source changes.
     frame = read_report("english_clustered_reviews.csv", ["review", "cluster"])
     frame = frame[frame["review"].astype(str).str.strip().ne("")].reset_index(drop=True)
-    if frame.empty:
-        raise gr.Error("ملف التعليقات فارغ.")
     texts = frame["review"].astype(str).tolist()
     identity = str(MODELS / "multilingual_encoder") + str(encoder.max_seq_length)
     digest = hashlib.sha256((identity + "\0" + "\0".join(texts)).encode()).hexdigest()[:20]
@@ -220,20 +207,18 @@ def search_index(file_signature):
         vectors = encoder.encode(texts, batch_size=16, normalize_embeddings=True,
                                  convert_to_numpy=True, show_progress_bar=True)
         np.save(path, vectors)
-    if len(vectors) != len(frame):
-        raise gr.Error("حجم فهرس البحث لا يطابق البيانات.")
     return frame, vectors
 
 
 def search_reviews(query):
     query = (query or "").strip()
     if not query:
-        raise gr.Error("اكتبي موضوع البحث أولًا، بالعربي أو الإنجليزي.")
-    if len(query) > 3000:
-        raise gr.Error("الحد الأقصى 3000 حرف.")
+        raise gr.Error("اكتبي موضوع البحث أولًا.")
+    if len(query) > MAX_CHARS:
+        raise gr.Error(f"الحد الأقصى {MAX_CHARS} حرف.")
     path = REPORTS / "english_clustered_reviews.csv"
     if not path.exists():
-        raise gr.Error("ملف english_clustered_reviews.csv غير موجود؛ شغّلي سكربت الاستكشاف أولًا.")
+        raise gr.Error("شغّلي explore_english.py أولًا.")
     start = time.perf_counter()
     frame, vectors = search_index((path.stat().st_mtime_ns, path.stat().st_size))
     query_vector = encoder.encode([query], normalize_embeddings=True, convert_to_numpy=True)[0]
@@ -241,496 +226,146 @@ def search_reviews(query):
     order = np.argsort(-scores)[:5]
     result = frame.iloc[order][["review", "cluster"]].copy()
     result["similarity"] = np.round(scores[order], 3)
-    result.columns = ["تعليق مشابه", "المجموعة", "تشابه جيب التمام"]
-    return result, (f"زمن البحث: {time.perf_counter()-start:.2f} ثانية. "
-                    "الدرجة للتشابه وليست احتمال صحة؛ النتائج الأقرب قد تظل غير مناسبة. "
-                    "البحث عابر اللغات استكشافي ولم يُقيّم بمقياس استرجاع مستقل.")
-
-
-CSS = """
-.gradio-container table,
-.gradio-container table thead,
-.gradio-container table tbody,
-.gradio-container table tr,
-.gradio-container table td,
-.gradio-container table th,
-.gradio-container [role="grid"],
-.gradio-container [role="gridcell"],
-.gradio-container [role="columnheader"] {
-    background: #ffffff !important;
-    color: #172b42 !important;
-    border-color: #d4dfe8 !important;
-}
-.gradio-container table th,
-.gradio-container [role="columnheader"] {
-    background: #e6f2ef !important;
-    color: #153e3a !important;
-}
-.gradio-container table td *,
-.gradio-container table th *,
-.gradio-container [role="gridcell"] * {
-    color: inherit !important;
-}
-.gradio-container table td {line-height: 1.8 !important;}
-
-.gradio-container {font-size: 15px !important; padding: 20px !important;}
-.toast-body, .toast-body *, .toast-wrap, .toast-wrap * {color: #f8fafc !important;}
-textarea {font-size: 16px !important;}
-
-#search-input textarea {direction: ltr !important; text-align: left !important;}
-
-.gradio-container {
-
-    max-width: 1120px !important;
-
-    margin: auto !important;
-
-    direction: rtl;
-
-    font-family: Tahoma, Arial, sans-serif !important;
-
-}
-
-.hero {
-
-    background: linear-gradient(120deg, #102b46, #155e63);
-
-    padding: 32px;
-
-    border-radius: 22px;
-
-    margin: 12px 0 24px;
-
-    color: white;
-
-}
-
-.hero h1 {
-
-    color: white !important;
-
-    font-size: 30px !important;
-
-    margin: 8px 0 12px !important;
-
-}
-
-.hero p {
-
-    color: #d7eeee !important;
-
-    font-size: 16px;
-
-    line-height: 1.9;
-
-}
-
-.hero .eyebrow {
-
-    color: #8fe3d5;
-
-    font-size: 13px;
-
-}
-
-.panel {
-
-    border: 1px solid #dce5ed !important;
-
-    border-radius: 18px !important;
-
-    padding: 22px !important;
-
-    background: white !important;
-
-    box-shadow: 0 6px 20px rgba(16, 43, 70, 0.04);
-
-}
-
-textarea, input {
-
-    direction: rtl !important;
-
-    text-align: right !important;
-
-}
-
-textarea {
-
-    line-height: 1.9 !important;
-
-}
-
-#analyze-button, #batch-button {
-
-    border-radius: 12px !important;
-
-    min-height: 48px;
-
-    font-size: 16px !important;
-
-}
-
-.note {
-
-    background: #edf7f5;
-
-    border-right: 4px solid #158577;
-
-    border-radius: 10px;
-
-    padding: 14px 18px;
-
-    color: #244b49;
-
-    line-height: 1.9;
-
-    margin-top: 16px;
-
-}
-
-.footer-note {
-
-    text-align: center;
-
-    color: #64748b;
-
-    padding: 18px;
-
-    font-size: 12px;
-
-}
-
-@media (max-width: 700px) {
-
-    .hero { padding: 22px; }
-
-    .hero h1 { font-size: 24px !important; }
-
-    .panel { padding: 14px !important; }
-
-}
-
+    result.columns = ["تعليق مشابه", "المجموعة", "التشابه"]
+    return result, f"{time.perf_counter() - start:.2f} ثانية · الدرجة للتشابه وليست احتمال صحة."
+
+
+# ---------------------------------------------------------------- layout
+ABOUT = """
+### نتائج الاختبار
+
+| المهمة | النموذج | Macro-F1 | عدد التعليقات |
+|---|---|---:|---:|
+| نوع التعليق | TF-IDF (الأساس) | 57.01% | 451 |
+| نوع التعليق | TF-IDF + Embeddings | **62.64%** | 451 |
+| المشاعر | TF-IDF كلمات (v1) | 85.92% | 4,356 |
+| المشاعر | TF-IDF كلمات وحروف (v2) | **86.49%** | 4,356 |
+
+### حدود النموذج
+- المشاعر إيجابي أو سلبي فقط؛ لا توجد فئة محايد أو مختلط.
+- يختار نوعًا واحدًا حتى لو جمع التعليق أكثر من غرض.
+- قد يخطئ مع اللهجات والسخرية والنفي.
+- الإنجليزي: المشاعر فقط، وهي تجريبية ومتعلمة من النجوم.
 """
 
-# Set matching light/dark values so the interface stays readable
+CSS = """
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap');
 
-# even when the browser prefers dark mode.
+:root {
+  --ink: #1f2933; --muted: #6b7682; --line: #e6e9ee; --bg: #f7f8fa;
+  --accent: #0f766e; --accent-soft: #e7f3f1;
+  --pos: #15803d; --pos-soft: #e8f5ec; --neg: #b42318; --neg-soft: #fdecea;
+}
+.gradio-container {
+  max-width: 920px !important; margin: auto !important; direction: rtl;
+  font-family: 'IBM Plex Sans Arabic', Tahoma, Arial, sans-serif !important;
+  color: var(--ink);
+}
+.gradio-container * { font-family: inherit; }
+textarea, input { direction: rtl !important; text-align: right !important; font-size: 16px !important; line-height: 1.8 !important; }
+#search-input textarea { direction: ltr !important; text-align: left !important; }
 
-theme = gr.themes.Soft(
+.header { padding: 28px 4px 12px; }
+.header h1 { font-size: 28px !important; font-weight: 600; margin: 0 0 6px !important; color: var(--ink) !important; }
+.header p { color: var(--muted) !important; margin: 0 !important; font-size: 15px; }
 
-    primary_hue="teal",
+.card {
+  background: #fff; border: 1px solid var(--line); border-radius: 14px;
+  padding: 18px 20px; display: flex; flex-direction: column; gap: 14px;
+}
+.card.empty { color: var(--muted); align-items: center; padding: 28px; }
+.card h4 { margin: 0 !important; font-size: 15px; font-weight: 600; color: var(--ink); }
+.stat { display: flex; justify-content: space-between; align-items: center; }
+.stat .label { color: var(--muted); font-size: 14px; }
+.stat .value { font-size: 18px; font-weight: 600; }
+.pill { padding: 4px 14px; border-radius: 999px; font-weight: 600; font-size: 15px; }
+.pill.pos { background: var(--pos-soft); color: var(--pos); }
+.pill.neg { background: var(--neg-soft); color: var(--neg); }
+.pill.muted { background: var(--bg); color: var(--muted); }
+.note { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 10px; }
 
-    secondary_hue="slate",
+.summary { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 700px) { .summary { grid-template-columns: 1fr; } }
+.bar-row { display: grid; grid-template-columns: 110px 1fr 36px; align-items: center; gap: 10px; font-size: 14px; }
+.bar { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; }
+.fill { display: block; height: 100%; border-radius: 99px; background: var(--muted); }
+.fill.pos { background: var(--pos); } .fill.neg { background: var(--neg); } .fill.accent { background: var(--accent); }
+.bar-count { text-align: left; color: var(--muted); }
+.muted-text { color: var(--muted) !important; font-size: 13px; }
 
-    neutral_hue="slate",
+button.primary { border-radius: 10px !important; min-height: 44px; font-size: 15px !important; }
 
-).set(
+.gradio-container table, .gradio-container table td, .gradio-container table th,
+.gradio-container [role="gridcell"], .gradio-container [role="columnheader"] {
+  background: #fff !important; color: var(--ink) !important; border-color: var(--line) !important;
+}
+.gradio-container table th, .gradio-container [role="columnheader"] { background: var(--bg) !important; }
+.gradio-container table td * , .gradio-container table th * { color: inherit !important; }
+"""
 
-    body_background_fill="#f4f7fb",
-
-    body_background_fill_dark="#f4f7fb",
-
-    body_text_color="#172b42",
-
-    body_text_color_dark="#172b42",
-
-    block_background_fill="#ffffff",
-
-    block_background_fill_dark="#ffffff",
-
-    block_border_color="#dce5ed",
-
-    block_border_color_dark="#dce5ed",
-
-    block_label_text_color="#334155",
-
-    block_label_text_color_dark="#334155",
-
-    block_title_text_color="#172b42",
-
-    block_title_text_color_dark="#172b42",
-
-    input_background_fill="#f8fafc",
-
-    input_background_fill_dark="#f8fafc",
-
-    input_border_color="#dce5ed",
-
-    input_border_color_dark="#dce5ed",
-
-    input_placeholder_color="#64748b",
-
-    input_placeholder_color_dark="#64748b",
-
-    button_primary_background_fill="#117c72",
-
-    button_primary_background_fill_dark="#117c72",
-
-    button_primary_background_fill_hover="#0f625b",
-
-    button_primary_background_fill_hover_dark="#0f625b",
-
-    button_primary_text_color="#ffffff",
-
-    button_primary_text_color_dark="#ffffff",
-
-    button_secondary_background_fill="#e8eef4",
-
-    button_secondary_background_fill_dark="#e8eef4",
-
-    button_secondary_text_color="#172b42",
-
-    button_secondary_text_color_dark="#172b42",
-
+theme = gr.themes.Base(primary_hue="teal", neutral_hue="slate").set(
+    body_background_fill="#f7f8fa", body_background_fill_dark="#f7f8fa",
+    body_text_color="#1f2933", body_text_color_dark="#1f2933",
+    block_background_fill="#ffffff", block_background_fill_dark="#ffffff",
+    block_border_color="#e6e9ee", block_border_color_dark="#e6e9ee",
+    block_label_text_color="#6b7682", block_label_text_color_dark="#6b7682",
+    block_title_text_color="#1f2933", block_title_text_color_dark="#1f2933",
+    input_background_fill="#ffffff", input_background_fill_dark="#ffffff",
+    input_border_color="#e6e9ee", input_border_color_dark="#e6e9ee",
+    button_primary_background_fill="#0f766e", button_primary_background_fill_dark="#0f766e",
+    button_primary_background_fill_hover="#115e59", button_primary_background_fill_hover_dark="#115e59",
+    button_primary_text_color="#ffffff", button_primary_text_color_dark="#ffffff",
+    border_color_primary="#e6e9ee", border_color_primary_dark="#e6e9ee",
 )
 
-# Gradio 6 accepts theme/CSS in launch; older versions in Blocks.
-
 gradio_major = int(gr.__version__.split(".")[0])
-
-style_options = {"theme": theme, "css": CSS}
-
-blocks_options = style_options if gradio_major < 6 else {}
-
-with gr.Blocks(
-
-    title="صوت العميل | محلّل الآراء",
-
-    **blocks_options,
-
-) as demo:
-
-    gr.HTML("""
-
-    <div class="hero">
-
-        <div class="eyebrow">تحليل آراء مستخدمي التطبيقات</div>
-
-        <h1>صوت العميل</h1>
-
-        <p>
-
-            افهم نوع التعليق والمشاعر المتوقعة،
-
-            واستعرض ملخصًا لآراء العملاء في مكان واحد.
-
-        </p>
-
-    </div>
-
-    """)
-
-    with gr.Tab("تحليل تعليق"):
-
-        with gr.Row():
-
-            with gr.Column(scale=3, elem_classes=["panel"]):
-
-                gr.Markdown("### وش يقول العميل؟")
-
-                review = gr.Textbox(
-
-                    label="التعليق بالعربي أو الإنجليزي",
-
-                    placeholder="اكتبي تعليق العميل هنا...",
-
-                    lines=5,
-
-                )
-
-                analyze_button = gr.Button(
-
-                    "تحليل التعليق",
-
-                    variant="primary",
-
-                    elem_id="analyze-button",
-
-                )
-
-                gr.Examples(
-
-                    label="أمثلة للتجربة",
-
-                    examples=[
-
-                        ["التطبيق يقفل كل ما حاولت أسجل الدخول"],
-
-                        ["أتمنى تضيفون الوضع الليلي"],
-
-                        ["تطبيق جميل وسهل الاستخدام"],
-
-                    ],
-
-                    inputs=[review],
-
-                )
-
-            with gr.Column(scale=2, elem_classes=["panel"]):
-
-                gr.Markdown("### نتيجة التحليل")
-
-                topic = gr.Textbox(
-
-                    label="نوع التعليق المتوقع",
-
-                    placeholder="تظهر النتيجة بعد التحليل",
-
-                    interactive=False,
-
-                )
-
-                feeling = gr.Textbox(
-
-                    label="المشاعر المتوقعة",
-
-                    placeholder="إيجابي أو سلبي",
-
-                    interactive=False,
-
-                )
-
-                timing = gr.Textbox(
-
-                    label="زمن المعالجة وملاحظات النتيجة",
-                    lines=4,
-
-                    interactive=False,
-
-                )
-
-        gr.HTML("""
-
-        <div class="note">
-
-            <strong>كيف تقرأ النتيجة؟</strong> العربي مُقيّم، والإنجليزي تجريبي وحدوده مذكورة مع النتيجة.
-
-            طلب التحسين قد يكون مصحوبًا بمدح أو نقد.
-
-            النموذج يختار إيجابيًا أو سلبيًا فقط؛
-
-            التعليقات المختلطة والساخرة قد تحتاج مراجعة بشرية.
-
-        </div>
-
-        """)
-
-        analyze_button.click(
-
-            fn=analyze_one,
-
-            inputs=[review],
-
-            outputs=[topic, feeling, timing],
-
-        )
-
-    with gr.Tab("تحليل مجموعة"):
-
-        with gr.Column(elem_classes=["panel"]):
-
-            gr.Markdown(
-
-                "### نظرة على آراء العملاء\n"
-
-                "ضعي كل تعليق في سطر مستقل — حتى 100 تعليق، بالعربي أو الإنجليزي."
-
-            )
-
-            batch_input = gr.Textbox(
-
-                label="التعليقات",
-
-                lines=7,
-
-                placeholder=(
-
-                    "التطبيق يعلق عند الدفع\n"
-
-                    "أتمنى إضافة الوضع الليلي\n"
-
-                    "تطبيق ممتاز وسهل"
-
-                ),
-
-            )
-
-            batch_button = gr.Button(
-
-                "تحليل التعليقات",
-
-                variant="primary",
-
-                elem_id="batch-button",
-
-            )
-
-        batch_summary = gr.Markdown()
-
-        batch_result = gr.Dataframe(
-
-            headers=["التعليق", "نوع التعليق", "المشاعر", "ملاحظات"],
-
-            interactive=False,
-
-            label="التوقعات لكل تعليق",
-
-        )
-
-        batch_button.click(
-
-            fn=analyze_batch,
-
-            inputs=[batch_input],
-
-            outputs=[batch_result, batch_summary],
-
-        )
-
-    with gr.Tab("استكشاف المصدر الثالث"):
-        gr.Markdown("### المواضيع المتكررة والبحث عن تعليقات مشابهة\n"
-                    "عينة من 3,000 تعليق يغلب عليها الإنجليزي وتتضمن لغات أخرى. "
-                    "هذا استكشاف وبحث دلالي؛ لا ينتج تصنيف نوع أو مشاعر إنجليزيًا مُقيّمًا.")
-        load_button = gr.Button("عرض المجموعات وأمثلتها", variant="primary")
-        summary_table = gr.Dataframe(interactive=False, label="ملخص المجموعات")
-        examples_table = gr.Dataframe(interactive=False, label="أمثلة المراجعة")
-        load_button.click(load_exploration, inputs=[], outputs=[summary_table, examples_table])
-        query = gr.Textbox(label="ابحثي عن موضوع بالعربي أو الإنجليزي",
-                           placeholder="The app crashes after the update", elem_id="search-input")
-        search_button = gr.Button("البحث عن تعليقات مشابهة", variant="primary")
-        search_table = gr.Dataframe(interactive=False, label="أقرب خمسة تعليقات")
-        search_note = gr.Textbox(interactive=False, label="ملاحظة البحث")
+style = {"theme": theme, "css": CSS}
+
+with gr.Blocks(title="صوت العميل", **(style if gradio_major < 6 else {})) as demo:
+    gr.HTML("""<div class="header"><h1>صوت العميل</h1>
+        <p>اعرفي نوع تعليق العميل ومشاعره في ثوانٍ.</p></div>""")
+
+    with gr.Tab("تعليق واحد"):
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=3):
+                review = gr.Textbox(label="التعليق", lines=4, placeholder="اكتبي تعليق العميل هنا...")
+                analyze_button = gr.Button("حلّلي", variant="primary")
+                gr.Examples(label="أمثلة", inputs=[review], examples=[
+                    ["التطبيق يقفل كل ما حاولت أسجل الدخول"],
+                    ["أتمنى تضيفون الوضع الليلي"],
+                    ["تطبيق جميل وسهل الاستخدام"],
+                ])
+            with gr.Column(scale=2):
+                result = gr.HTML('<div class="card empty">تظهر النتيجة هنا</div>')
+        analyze_button.click(result_card, inputs=[review], outputs=[result])
+        review.submit(result_card, inputs=[review], outputs=[result])
+
+    with gr.Tab("مجموعة تعليقات"):
+        batch_input = gr.Textbox(label=f"كل تعليق في سطر — حتى {MAX_BATCH}", lines=6,
+                                 placeholder="التطبيق يعلق عند الدفع\nأتمنى إضافة الوضع الليلي\nتطبيق ممتاز وسهل")
+        batch_button = gr.Button("حلّلي المجموعة", variant="primary")
+        batch_summary = gr.HTML()
+        batch_table = gr.Dataframe(headers=["التعليق", "نوع التعليق", "المشاعر", "ملاحظات"],
+                                   interactive=False, wrap=True, label="النتائج")
+        batch_button.click(batch_ui, inputs=[batch_input], outputs=[batch_table, batch_summary])
+
+    with gr.Tab("استكشاف"):
+        gr.Markdown("مجموعات من 3,000 تعليق (أغلبها إنجليزي)، وبحث عن تعليقات مشابهة.")
+        load_button = gr.Button("اعرضي المجموعات", variant="primary")
+        clusters = gr.Dataframe(interactive=False, wrap=True, label="المجموعات")
+        examples = gr.Dataframe(interactive=False, wrap=True, label="أمثلة")
+        load_button.click(load_exploration, outputs=[clusters, examples])
+        query = gr.Textbox(label="ابحثي عن موضوع", elem_id="search-input",
+                           placeholder="The app crashes after the update")
+        search_button = gr.Button("ابحثي", variant="primary")
+        search_table = gr.Dataframe(interactive=False, wrap=True, label="أقرب 5 تعليقات")
+        search_note = gr.Markdown(elem_classes=["muted-text"])
         search_button.click(search_reviews, inputs=[query], outputs=[search_table, search_note])
-        gr.Markdown("أول بحث يجهّز الفهرس وقد يستغرق وقتًا أطول. أرقام المجموعات ليست ترتيبًا للجودة، "
-                    "وتسمياتها تفسيرات أولية مبنية على أمثلة محدودة.")
+        query.submit(search_reviews, inputs=[query], outputs=[search_table, search_note])
 
-    with gr.Tab("الأداء وحدود الاستخدام"):
-        with gr.Column(elem_classes=["panel"]):
-            gr.Markdown(active_metrics())
-
-    gr.HTML("""
-
-    <div class="footer-note">
-
-        صوت العميل · مشروع تطبيقي في معالجة اللغة الطبيعية
-
-    </div>
-
-    """)
+    with gr.Tab("عن النموذج"):
+        gr.Markdown(ABOUT)
 
 if __name__ == "__main__":
-
-    launch_options = style_options if gradio_major >= 6 else {}
-
-    demo.queue().launch(
-
-        server_name="127.0.0.1",
-
-        share=False,
-
-        inbrowser=True,
-
-        **launch_options,
-
-    )
+    demo.queue().launch(server_name="127.0.0.1", share=False, inbrowser=True,
+                        **(style if gradio_major >= 6 else {}))
