@@ -8,8 +8,9 @@ App reviews mix bugs, feature requests, praise, and unrelated content. This proj
 
 - Arabic topic classification: `bug_report`, `improvement_request`, `rating`, `others`.
 - Arabic binary sentiment: `negative`, `positive` (no neutral or mixed class).
-- Local Gradio demo: one review or up to 100 newline-separated reviews.
-- Separate exploratory script: clusters a 3,000-review sample from user_quality. This is not an English classification benchmark and is not currently integrated into the demo.
+- Local Gradio demo: one review or up to 100 newline-separated reviews, Arabic or English.
+- Exploration tab: shows clusters of a 3,000-review sample from user_quality, with example reviews, and semantic search over that sample. This is exploratory, not an English classification benchmark.
+- Experimental English path: English sentiment trained on star-derived labels, and English topic by similarity to category descriptions. The English topic output has not been evaluated.
 
 ## Data
 
@@ -52,7 +53,13 @@ The encoder is frozen: training the classifier **is not encoder fine-tuning**. S
 
 ### Sentiment
 
-Word TF-IDF plus Logistic Regression. C in {1, 10} was compared on validation; C=1 was selected. This is a separate model and dataset. Arabic sentiment does not use the embedding model.
+**Version 1:** word TF-IDF plus Logistic Regression. C in {1, 10} was compared on validation; C=1 was selected. This is a separate model and dataset.
+
+**Version 2 (`upgrade_models.py`):** candidates combine word TF-IDF, character TF-IDF (3–5 char n-grams, weight 0.5), and optionally normalized embeddings. Embedding weight in {0, 1} and C in {1, 10} were compared on validation, together with the version 1 model. The selected Arabic model uses **embedding weight 0 and C=1**, so it is word + character TF-IDF only; it does not use the encoder. The report file labels it `hybrid` because of the code path, not because embeddings contribute.
+
+### Experimental English sentiment
+
+Trained on a 12,000-review sample of user_quality with labels derived from stars (1–2 negative, 4–5 positive, 3 excluded). Rows were kept only if they contained Latin letters and no Arabic letters; this is not verified English. 1,454 text groups with conflicting star labels were excluded. Split 8,375 / 1,783 / 1,842 by hash. Selected on validation: embedding weight 1, C=1.
 
 ### Exploratory clustering
 
@@ -70,7 +77,9 @@ Three nearest-center and two random examples were inspected per cluster (25 tota
 | Embeddings only | 63.86% | 56.15% |
 | Hybrid | **69.18%** | **62.64%** |
 
-Hybrid was chosen before test evaluation. Relative to baseline, it adds **5.63 percentage points of Macro-F1** and **0.89 percentage points of accuracy**. Embeddings alone did not outperform baseline. These are observed differences, not a claim of statistical significance.
+Hybrid was chosen before test evaluation. Relative to baseline, it adds **5.63 percentage points of Macro-F1** and **0.89 percentage points of accuracy**. Embeddings alone did not outperform baseline. The paired bootstrap interval excludes zero; it is still a single test set and a single split.
+
+95% bootstrap CIs (1,000 resamples) for test Macro-F1: baseline [51.21%, 62.31%], embeddings [50.95%, 61.07%], hybrid [57.67%, 67.21%]. Paired bootstrap of the hybrid minus baseline difference: [+0.77, +10.81] points; the hybrid was better in 99.1% of resamples.
 
 Validation Macro-F1: baseline 59.57%, embeddings 60.20%, hybrid 67.19%.
 
@@ -93,6 +102,20 @@ Accuracy **85.95%**, Macro-F1 **85.92%**.
 | Positive | 0.878 | 0.828 | 0.852 | 2,132 |
 
 Topic and sentiment were evaluated on different test sets. These numbers do not measure joint correctness of both outputs for the same review.
+
+### Sentiment version 2
+
+| Model | Validation Macro-F1 | Test Accuracy | Test Macro-F1 | Test Macro-F1 95% CI |
+|---|---:|---:|---:|---:|
+| Arabic v1 (word TF-IDF) | 86.19% | 85.95% | 85.92% | — |
+| Arabic v2 (word + char TF-IDF) | 87.20% | **86.52%** | **86.49%** | [85.43%, 87.51%] |
+| English experimental (star proxy) | 82.23% | 87.68% | 82.33% | [80.38%, 84.31%] |
+
+CIs are percentile bootstrap (1,000 resamples) over test predictions. The Arabic v2 choice was made on validation. The Arabic test set had already been inspected during error analysis, so the v2 test result is descriptive, not a fresh independent evaluation. The +0.57 point Macro-F1 gain is small and within the v2 confidence interval.
+
+Arabic v2 by platform: Android 2,188 reviews, Macro-F1 85.24%; iOS 2,168 reviews, Macro-F1 87.70%.
+
+English scores measure agreement with star-derived labels, not human-verified sentiment. The English test set is imbalanced (1,398 positive, 444 negative), so accuracy is higher than Macro-F1.
 
 ## Error analysis and limitations
 
@@ -140,8 +163,12 @@ For a fresh reproduction:
 .\.venv\Scripts\python.exe evaluate_test.py
 .\.venv\Scripts\python.exe train_sentiment.py
 .\.venv\Scripts\python.exe explore_english.py
+.\.venv\Scripts\python.exe upgrade_models.py
+.\.venv\Scripts\python.exe check_app.py
 .\.venv\Scripts\python.exe app.py
 ```
+
+`check_app.py` runs automated checks of the app functions and writes `reports/upgrade_app_checks.json` and `reports/upgrade_ui_examples.csv`. A pass confirms the code runs, not that predictions are correct.
 
 The first embedding run requires internet to download the model. Subsequent runs use the local encoder and cached vectors. `train_embeddings.py` includes the appended hybrid experiment. Open the local address printed by Gradio and keep the terminal running. `share=False` does not create a public demo URL.
 
@@ -165,6 +192,8 @@ Model binaries, raw data, processed data, embeddings, and `.venv` are excluded f
 | `evaluate_test.py` | Topic test comparison and platform slices |
 | `train_sentiment.py` | Sentiment selection and test evaluation |
 | `explore_english.py` | Additional-source clustering |
+| `upgrade_models.py` | Sentiment v2 (Arabic) and experimental English sentiment |
+| `check_app.py` | Automated app checks and sample outputs |
 | `app.py` | Local Gradio demo |
 | `reports/` | Metrics, predictions, error analysis, clustering summaries |
 
@@ -177,6 +206,20 @@ These are actual UI observations, including failures, not expected labels substi
 | التطبيق خيالي | rating | negative | Sentiment error under apparent praise intent |
 | التطبيق مفيد ولكن يحتاج بعض التحسينات | improvement_request | positive | Praise plus improvement request |
 | ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive | Mixed sentiment reduced to a binary output |
+
+After the version 2 upgrade (`reports/upgrade_ui_examples.csv`):
+
+| Input | Predicted topic | Predicted sentiment | Interpretation |
+|---|---|---|---|
+| التطبيق خيالي | rating | negative | Still a sentiment error |
+| مشكور والله ما قصرتو | rating | negative | Sentiment error on dialect thanks |
+| ليس جميل نيمو أفضل منه | rating | positive | Negation missed |
+| ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive | Mixed sentiment, binary output |
+| The app is amazing | bug_report (experimental) | positive (experimental) | English topic error |
+| The app crashes every time I open it | bug_report (experimental) | negative (experimental) | Plausible |
+| Please add dark mode | others (experimental) | positive (experimental) | English topic error; expected improvement_request |
+
+The unevaluated English topic output fails on simple examples. Treat it as a demonstration of the limitation, not a supported feature.
 
 ## Presentation and remaining release checks
 

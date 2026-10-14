@@ -1,6 +1,6 @@
 ﻿cluster,review_count,keywords,suggested_topic_manual,review_notes
-1,633,app | good | great | love | good app | apps | best | nice,,
-2,685,update | work | app | phone | doesn | working | fix | doesn work,,
-3,571,bad | love | super | kumar | khan | like | thanks | hate,,
-4,666,best | great | works | use | good | like | easy | need,,
-5,445,good | nice | love | great | awesome | best | like | loved,,
+1,633,app | good | great | love | good app | apps | best | nice,General praise,
+2,685,update | work | app | phone | doesn | working | fix | doesn work,Operational / update problems,
+3,571,bad | love | super | kumar | khan | like | thanks | hate,Unclear and varied short texts,
+4,666,best | great | works | use | good | like | easy | need,"Usability / performance, mixed content",
+5,445,good | nice | love | great | awesome | best | like | loved,Short praise,
