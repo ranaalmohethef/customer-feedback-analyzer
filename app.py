@@ -154,8 +154,11 @@ def analyze_batch(text):
         return empty,"الحد 100 تعليق، وكل تعليق لا يتجاوز 3000 حرف."
     result=predict_reviews(texts)
     counts=result["المشاعر"].value_counts()
-    summary=f"**عدد التعليقات: {len(result)}**\n\n"
+    topic_counts=result["نوع التعليق"].value_counts()
+    summary=f"**عدد التعليقات: {len(result)}**\n\n**المشاعر المتوقعة:**\n\n"
     summary+="\n".join(f"- {label}: {count}" for label,count in counts.items())
+    summary+="\n\n**أنواع التعليقات المتوقعة:**\n\n"
+    summary+="\n".join(f"- {label}: {count}" for label,count in topic_counts.items())
     summary+="\n\nنتائج متوقعة وليست حقائق مؤكدة. النتائج الإنجليزية التجريبية مفصولة بالاسم عن العربية."
     return result,summary
 
