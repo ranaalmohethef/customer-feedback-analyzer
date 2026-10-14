@@ -12,7 +12,7 @@
     "passed": true
   },
   {
-    "check": "English sentiment only",
+    "check": "English input gets Arabic-only message",
     "passed": true
   },
   {

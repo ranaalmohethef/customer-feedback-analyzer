@@ -35,9 +35,8 @@ def arabic():
 
 
 def english():
-    assert app.en_v2 is not None, "Run upgrade_models.py first"
     t, s, n = app.analyze_one("The app crashes every time I log in")
-    assert t == "—" and "تجريبي" in s
+    assert t == "—" and s == "—" and "العربية" in n
 
 
 def batch():
@@ -68,14 +67,13 @@ def search():
 
 for name, fn in [
     ("Empty input", empty), ("Long input", long), ("Arabic inference", arabic),
-    ("English sentiment only", english), ("Mixed batch", batch), ("English interface", english_ui),
+    ("English input gets Arabic-only message", english), ("Mixed batch", batch), ("English interface", english_ui),
     ("Result views (both languages)", views), ("Semantic search", search),
 ]:
     check(name, fn)
 
 examples = ["التطبيق خيالي", "مشكور والله ما قصرتو", "ليس جميل نيمو أفضل منه",
-            "ما اعجبتني الواجهه بس التطبيق مفيد", "The app is amazing",
-            "The app crashes every time I open it", "Please add dark mode"]
+            "ما اعجبتني الواجهه بس التطبيق مفيد", "اكل لذيذ", "لذيذ الاكل", "The app is amazing"]
 rows = []
 for text in examples:
     a, b, c = app.analyze_one(text)

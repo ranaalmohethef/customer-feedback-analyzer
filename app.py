@@ -53,7 +53,7 @@ T = {
         "analyze_batch": "حلّل المجموعة", "search_ph": "ابحث عن موضوع، مثل: The app crashes after the update",
         "search": "ابحث", "show_clusters": "اعرض المجموعات", "examples": "جرّب مثالًا:",
         "placeholder": "تظهر النتيجة هنا", "topic": "نوع التعليق", "sentiment": "المشاعر",
-        "experimental": "تجريبي", "seconds": "ثانية", "reviews": "تعليق",
+        "seconds": "ثانية", "reviews": "تعليق",
         "summary_note": "نتائج متوقعة من النموذج وليست مؤكدة.", "no_arabic": "لا يوجد تعليق عربي.",
         "col_review": "التعليق", "col_note": "ملاحظات",
         "explore_intro": "مجموعات من 3,000 تعليق أغلبها إنجليزي، وبحث عن تعليقات مشابهة.",
@@ -64,8 +64,7 @@ T = {
         "batch_limit": f"الحد {MAX_BATCH} تعليق، وكل تعليق لا يتجاوز {MAX_CHARS} حرف.",
         "search_empty": "اكتب موضوع البحث أولًا.",
         "notes": {"mixed": "نص مختلط؛ حُلّل كعربي.",
-                  "english": "الإنجليزي: المشاعر فقط، وهي تجريبية. نوع التعليق للعربي فقط.",
-                  "unsupported": "اكتب التعليق بالعربي أو الإنجليزي.",
+                  "unsupported": "التحليل للتعليقات العربية فقط.",
                   "unsure": "ثقة النموذج منخفضة؛ يحتاج مراجعة بشرية."},
         "about": """
 <h3>نتائج الاختبار</h3>
@@ -79,7 +78,7 @@ T = {
 <li>يختار نوعًا واحدًا حتى لو جمع التعليق أكثر من غرض.</li>
 <li>قد يخطئ مع اللهجات والسخرية والنفي.</li>
 <li>إذا كانت ثقة النموذج منخفضة يعرض "غير متأكد" بدل التخمين. الحد مختار من بيانات التحقق.</li>
-<li>الإنجليزي: المشاعر فقط، وهي تجريبية ومتعلمة من النجوم.</li></ul>""",
+<li>تحليل التعليقات للعربي فقط. زر English يغيّر لغة الواجهة.</li></ul>""",
     },
     "en": {
         "dir": "ltr", "title": "Voice of the Customer", "subtitle": "See the type and sentiment of a customer review in seconds.",
@@ -89,7 +88,7 @@ T = {
         "analyze_batch": "Analyze batch", "search_ph": "Search a topic, e.g. The app crashes after the update",
         "search": "Search", "show_clusters": "Show clusters", "examples": "Try an example:",
         "placeholder": "The result appears here", "topic": "Review type", "sentiment": "Sentiment",
-        "experimental": "experimental", "seconds": "s", "reviews": "reviews",
+        "seconds": "s", "reviews": "reviews",
         "summary_note": "Model predictions, not confirmed labels.", "no_arabic": "No Arabic reviews.",
         "col_review": "Review", "col_note": "Notes",
         "explore_intro": "Clusters of 3,000 mostly English reviews, plus search for similar reviews.",
@@ -100,8 +99,7 @@ T = {
         "batch_limit": f"Up to {MAX_BATCH} reviews, {MAX_CHARS} characters each.",
         "search_empty": "Type a search topic first.",
         "notes": {"mixed": "Mixed text; analyzed as Arabic.",
-                  "english": "English: sentiment only (experimental). Review type is Arabic only.",
-                  "unsupported": "Write the review in Arabic or English.",
+                  "unsupported": "Review analysis supports Arabic text only.",
                   "unsure": "Low model confidence; needs human review."},
         "about": """
 <h3>Test results</h3>
@@ -115,10 +113,10 @@ T = {
 <li>One review type is chosen even when a review has several purposes.</li>
 <li>Dialect, sarcasm and negation can cause errors.</li>
 <li>When confidence is low the app shows "Not sure" instead of guessing. The threshold was chosen on validation data.</li>
-<li>English: sentiment only, experimental, learned from star ratings.</li></ul>""",
+<li>Review analysis is Arabic only; English changes the interface language.</li></ul>""",
     },
 }
-EXAMPLES = ["التطبيق يقفل كل ما حاولت أسجل الدخول", "أتمنى تضيفون الوضع الليلي", "The app crashes every time I open it"]
+EXAMPLES = ["التطبيق يقفل كل ما حاولت أسجل الدخول", "أتمنى تضيفون الوضع الليلي", "تطبيق جميل وسهل الاستخدام"]
 
 # ---------------------------------------------------------------- models
 required = ["hybrid_classifier.joblib", "sentiment_classifier.joblib", "multilingual_encoder"]
@@ -138,7 +136,6 @@ def load_optional(name):
 
 
 ar_v2 = load_optional("sentiment_ar_v2.joblib")
-en_v2 = load_optional("sentiment_en_v2.joblib")
 
 
 def load_thresholds():
@@ -154,17 +151,6 @@ TOPIC_TAU, SENTIMENT_TAU = load_thresholds()
 
 ARABIC = re.compile(r"[ء-غف-ي]")
 LATIN = re.compile(r"[A-Za-z]")
-
-
-def sentiment_predict(bundle, texts, vectors):
-    if bundle["kind"] == "baseline":
-        return bundle["pipeline"].predict(texts)
-    features = hstack([
-        bundle["word"].transform(texts),
-        bundle["char"].transform(texts) * 0.5,
-        csr_matrix(vectors * bundle["embedding_weight"]),
-    ], format="csr")
-    return bundle["classifier"].predict(features)
 
 
 def sentiment_proba(bundle, texts, vectors):
@@ -187,7 +173,7 @@ def confident(classes, proba, tau):
 
 
 def predict_codes(texts):
-    """Return language-neutral predictions: topic code, sentiment code, experimental flag, note code."""
+    """Return language-neutral predictions: topic code, sentiment code, note code."""
     vectors = encoder.encode(texts, batch_size=16, convert_to_numpy=True,
                              normalize_embeddings=True, show_progress_bar=False)
     out = []
@@ -201,21 +187,17 @@ def predict_codes(texts):
             classes, proba = sentiment_proba(ar_v2, [text], v)
             senti = confident(classes, proba[0], SENTIMENT_TAU)
             note = "unsure" if "unsure" in (topic, senti) else ("mixed" if LATIN.search(text) else "")
-            out.append((topic, senti, False, note))
-        elif LATIN.search(text) and en_v2:
-            out.append((None, sentiment_predict(en_v2, [text], v)[0], True, "english"))
+            out.append((topic, senti, note))
         else:
-            out.append((None, None, False, "unsupported"))
+            out.append((None, None, "unsupported"))
     return out
 
 
 def label_row(code, lang):
-    topic, senti, experimental, note = code
+    topic, senti, note = code
     t = T[lang]
     topic_txt = TOPIC_NAMES[lang][topic] if topic else "—"
     senti_txt = SENTIMENT_NAMES[lang][senti] if senti else "—"
-    if senti and experimental:
-        senti_txt += f" ({t['experimental']})"
     return topic_txt, senti_txt, t["notes"].get(note, ""), senti
 
 

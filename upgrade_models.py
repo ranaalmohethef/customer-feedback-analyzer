@@ -1,4 +1,4 @@
-"""Train candidates on train; select on validation. Keep original models/reports."""
+"""Arabic sentiment v2: train candidates on train, select on validation. Keep original models/reports."""
 from pathlib import Path
 import hashlib
 import json
@@ -81,22 +81,4 @@ def train_task(train, val, test, prefix, baseline=None, interpretation=''):
 if __name__=='__main__':
     splits=[pd.read_csv(ROOT/'Data'/'processed'/f'sentiment_{s}.csv') for s in ['train','validation','test']]
     train_task(*splits,prefix='sentiment_ar',baseline=joblib.load(MODELS/'sentiment_classifier.joblib'),interpretation='Arabic v2 selected on existing validation. Old test has already been inspected; reuse is descriptive, not a fresh independent evaluation. Neutral/mixed unsupported.')
-    raw=pd.read_csv(ROOT/'Data'/'raw'/'user_quality.csv',usecols=['review','star'])
-    raw=raw.dropna(subset=['review','star']).copy()
-    raw['star']=pd.to_numeric(raw.star,errors='coerce')
-    raw['review']=raw.review.astype(str).str.strip()
-    raw=raw[raw.review.ne('') & raw.star.isin([1,2,4,5])].copy()
-    # Latin-script screen only, NOT reliable English language detection.
-    raw=raw[raw.review.str.contains('[A-Za-z]',regex=True)&~raw.review.str.contains('[\u0621-\u064A]',regex=True)].copy()
-    raw['sentiment']=np.where(raw.star>=4,'positive','negative')
-    raw['text_key']=raw.review.str.replace(r'\s+',' ',regex=True).str.strip()
-    conflicts=raw.groupby('text_key').sentiment.nunique()
-    bad=set(conflicts[conflicts>1].index)
-    raw=raw[~raw.text_key.isin(bad)].drop_duplicates('text_key')
-    sample=raw.sample(n=min(12000,len(raw)),random_state=42).copy()
-    sample['bucket']=sample.text_key.map(lambda x:int(hashlib.sha256(('english-v1|'+x).encode()).hexdigest(),16)%10000)
-    parts=[sample[sample.bucket<7000],sample[(sample.bucket>=7000)&(sample.bucket<8500)],sample[sample.bucket>=8500]]
-    audit={'sample_rows':len(sample),'conflicting_text_groups_excluded':len(bad),'label_rule':'1-2 stars negative, 4-5 positive; 3 omitted','language_filter':'Latin letters present and no basic Arabic letters; NOT verified English','source_previously_explored':True}
-    (REPORTS/'english_sentiment_data_audit.json').write_text(json.dumps(audit,indent=2),encoding='utf-8')
-    train_task(*parts,prefix='sentiment_en',interpretation='Exploratory sentiment proxy trained from stars, not human text sentiment labels. Source contains non-English Latin-script text and was previously explored. Scores measure agreement with star-derived labels, not verified English sentiment accuracy.')
-    print('DONE: Arabic selection and exploratory English model saved. Original files preserved.')
+    print('DONE: Arabic sentiment v2 selection saved. Original files preserved.')

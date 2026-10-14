@@ -1,7 +1,0 @@
-{
-  "sample_rows": 12000,
-  "conflicting_text_groups_excluded": 1454,
-  "label_rule": "1-2 stars negative, 4-5 positive; 3 omitted",
-  "language_filter": "Latin letters present and no basic Arabic letters; NOT verified English",
-  "source_previously_explored": true
-}

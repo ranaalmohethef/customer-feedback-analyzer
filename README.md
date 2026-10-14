@@ -12,7 +12,7 @@ App reviews mix bugs, feature requests, praise, and unrelated content. This proj
 - Arabic binary sentiment: `negative`, `positive` (no neutral or mixed class).
 - Local Gradio demo with an Arabic / English interface: one review or up to 100 newline-separated reviews. When the model is not confident, it answers "Not sure" instead of guessing.
 - Exploration tab: shows clusters of a 3,000-review sample from user_quality, with example reviews, and semantic search over that sample. This is exploratory, not an English classification benchmark.
-- Experimental English sentiment, trained on star-derived labels. Topic classification is Arabic only.
+- Review analysis is Arabic only. The English option changes the interface language, not the model.
 
 ## Data
 
@@ -59,10 +59,6 @@ The encoder is frozen: training the classifier **is not encoder fine-tuning**. S
 
 **Version 2 (`upgrade_models.py`):** candidates combine word TF-IDF, character TF-IDF (3–5 char n-grams, weight 0.5), and optionally normalized embeddings. Embedding weight in {0, 1} and C in {1, 10} were compared on validation, together with the version 1 model. The selected Arabic model uses **embedding weight 0 and C=1**, so it is word + character TF-IDF only; it does not use the encoder. The report file labels it `hybrid` because of the code path, not because embeddings contribute.
 
-### Experimental English sentiment
-
-Trained on a 12,000-review sample of user_quality with labels derived from stars (1–2 negative, 4–5 positive, 3 excluded). Rows were kept only if they contained Latin letters and no Arabic letters; this is not verified English. 1,454 text groups with conflicting star labels were excluded. Split 8,375 / 1,783 / 1,842 by hash. Selected on validation: embedding weight 1, C=1.
-
 ### Low-confidence abstention (`choose_thresholds.py`)
 
 The app answers "Not sure — needs human review" when the top predicted probability is below a threshold. The rule was fixed before looking at results: abstain on the least confident 10% of **validation** reviews. Test data was not used.
@@ -72,7 +68,7 @@ The app answers "Not sure — needs human review" when the top predicted probabi
 | Arabic topic | 0.493 | 72.05% | 74.93% | 46.15% |
 | Arabic sentiment | 0.583 | 87.21% | 90.46% | 58.02% |
 
-On abstained sentiment reviews the model was close to a coin flip (58%), so abstaining removes mostly unreliable answers. Abstention does not catch confident errors: `التطبيق خيالي` is still predicted negative. English sentiment has no threshold.
+On abstained sentiment reviews the model was close to a coin flip (58%), so abstaining removes mostly unreliable answers. Abstention does not catch confident errors: `التطبيق خيالي` is still predicted negative.
 
 ### Exploratory clustering
 
@@ -122,13 +118,10 @@ Topic and sentiment were evaluated on different test sets. These numbers do not 
 |---|---:|---:|---:|---:|
 | Arabic v1 (word TF-IDF) | 86.19% | 85.95% | 85.92% | — |
 | Arabic v2 (word + char TF-IDF) | 87.20% | **86.52%** | **86.49%** | [85.43%, 87.51%] |
-| English experimental (star proxy) | 82.23% | 87.68% | 82.33% | [80.38%, 84.31%] |
 
 CIs are percentile bootstrap (1,000 resamples) over test predictions. The Arabic v2 choice was made on validation. The Arabic test set had already been inspected during error analysis, so the v2 test result is descriptive, not a fresh independent evaluation. The +0.57 point Macro-F1 gain is small and within the v2 confidence interval.
 
 Arabic v2 by platform: Android 2,188 reviews, Macro-F1 85.24%; iOS 2,168 reviews, Macro-F1 87.70%.
-
-English scores measure agreement with star-derived labels, not human-verified sentiment. The English test set is imbalanced (1,398 positive, 444 negative), so accuracy is higher than Macro-F1.
 
 ## Error analysis and limitations
 
@@ -143,6 +136,8 @@ Observed patterns:
 - Potentially questionable reference labels: e.g. positive wording labeled negative. These are review flags, not confirmed relabelings.
 
 The UI example `التطبيق خيالي` was predicted as negative although its apparent intent is praise. `ما اعجبتني الواجهه بس التطبيق مفيد` was predicted positive, but contains mixed sentiment. No keyword exception was added to hide these failures.
+
+**Scope decisions.** Two English features were tried and removed to keep the project focused: an English topic guess by similarity to category descriptions (never evaluated, failed on simple examples such as "Please add dark mode" → other), and an English sentiment model trained on star ratings (no human-labeled evaluation, so its accuracy on real sentiment was unknown).
 
 Error samples are selected from disagreements, so they cannot estimate overall annotation-noise prevalence. The model may truncate long text at the encoder's input limit. Arabic-character checking in the UI is only a basic input check, not reliable language identification. The prototype is not production-ready.
 
@@ -206,7 +201,7 @@ Model binaries, raw data, processed data, embeddings, and `.venv` are excluded f
 | `evaluate_test.py` | Topic test comparison and platform slices |
 | `train_sentiment.py` | Sentiment selection and test evaluation |
 | `explore_english.py` | Additional-source clustering |
-| `upgrade_models.py` | Sentiment v2 (Arabic) and experimental English sentiment |
+| `upgrade_models.py` | Arabic sentiment v2 |
 | `choose_thresholds.py` | "Not sure" thresholds chosen on validation |
 | `check_app.py` | Automated app checks and sample outputs |
 | `app.py` | Local Gradio demo |
@@ -222,20 +217,6 @@ These are actual UI observations, including failures, not expected labels substi
 | التطبيق مفيد ولكن يحتاج بعض التحسينات | improvement_request | positive | Praise plus improvement request |
 | ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive | Mixed sentiment reduced to a binary output |
 
-After the version 2 upgrade, before the English topic output was removed:
-
-| Input | Predicted topic | Predicted sentiment | Interpretation |
-|---|---|---|---|
-| التطبيق خيالي | rating | negative | Still a sentiment error |
-| مشكور والله ما قصرتو | rating | negative | Sentiment error on dialect thanks |
-| ليس جميل نيمو أفضل منه | rating | positive | Negation missed |
-| ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive | Mixed sentiment, binary output |
-| The app is amazing | bug_report (experimental) | positive (experimental) | English topic error |
-| The app crashes every time I open it | bug_report (experimental) | negative (experimental) | Plausible |
-| Please add dark mode | others (experimental) | positive (experimental) | English topic error; expected improvement_request |
-
-An earlier version also guessed English topics by similarity to category descriptions. It was never evaluated and failed on simple examples (above), so it was removed from the demo. English input now gets sentiment only.
-
 Current app, with abstention (`reports/upgrade_ui_examples.csv`):
 
 | Input | Predicted topic | Predicted sentiment |
@@ -244,11 +225,11 @@ Current app, with abstention (`reports/upgrade_ui_examples.csv`):
 | مشكور والله ما قصرتو | rating | not sure |
 | ليس جميل نيمو أفضل منه | rating | positive (error) |
 | ما اعجبتني الواجهه بس التطبيق مفيد | rating | positive |
-| The app is amazing | — | positive (experimental) |
-| The app crashes every time I open it | — | negative (experimental) |
-| Please add dark mode | — | positive (experimental) |
+| اكل لذيذ | rating | positive |
+| لذيذ الاكل | rating | not sure |
+| The app is amazing | — | — (Arabic only) |
 
-The same meaning can get different results: `اكل لذيذ` is positive, but `لذيذ الاكل` is "not sure", because the word model treats `الاكل` and `اكل` as different tokens and learned `الاكل` as negative from delivery complaints.
+The last two Arabic rows have the same meaning but different results: `اكل لذيذ` is positive, but `لذيذ الاكل` is "not sure", because the word model treats `الاكل` and `اكل` as different tokens and learned `الاكل` as negative from delivery complaints.
 
 ## Presentation and remaining release checks
 
