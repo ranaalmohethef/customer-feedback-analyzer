@@ -1,0 +1,48 @@
+{
+  "summary": {
+    "evaluation_split": "validation",
+    "training_rows": 2050,
+    "validation_rows": 390,
+    "accuracy": 0.7,
+    "macro_f1": 0.5956550923506078
+  },
+  "per_class": {
+    "bug_report": {
+      "precision": 0.7623762376237624,
+      "recall": 0.7403846153846154,
+      "f1-score": 0.751219512195122,
+      "support": 104.0
+    },
+    "improvement_request": {
+      "precision": 0.7878787878787878,
+      "recall": 0.43333333333333335,
+      "f1-score": 0.5591397849462365,
+      "support": 60.0
+    },
+    "rating": {
+      "precision": 0.6751054852320675,
+      "recall": 0.8938547486033519,
+      "f1-score": 0.7692307692307693,
+      "support": 179.0
+    },
+    "others": {
+      "precision": 0.5263157894736842,
+      "recall": 0.2127659574468085,
+      "f1-score": 0.30303030303030304,
+      "support": 47.0
+    },
+    "accuracy": 0.7,
+    "macro avg": {
+      "precision": 0.6879190750520754,
+      "recall": 0.5700846636920273,
+      "f1-score": 0.5956550923506078,
+      "support": 390.0
+    },
+    "weighted avg": {
+      "precision": 0.6977963588394919,
+      "recall": 0.7,
+      "f1-score": 0.6759229443584585,
+      "support": 390.0
+    }
+  }
+}

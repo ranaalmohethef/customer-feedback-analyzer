@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+Data/raw/
+Data/processed/
+Data/embedding_cache/
+models/
+*.zip
+.DS_Store
+Thumbs.db
+app_before_*.py
+START_HERE.md
+APP_UPDATE_STEPS.md

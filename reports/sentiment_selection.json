@@ -1,0 +1,10 @@
+{
+  "selection_split": "validation",
+  "selection_metric": "macro_f1",
+  "selected_C": 1.0,
+  "validation_macro_f1": 0.8618850718983604,
+  "labels": [
+    "negative",
+    "positive"
+  ]
+}

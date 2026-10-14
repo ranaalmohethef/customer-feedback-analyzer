@@ -1,0 +1,39 @@
+{
+  "bug_report": {
+    "precision": 0.703125,
+    "recall": 0.7563025210084033,
+    "f1-score": 0.728744939271255,
+    "support": 119.0
+  },
+  "improvement_request": {
+    "precision": 0.7241379310344828,
+    "recall": 0.35,
+    "f1-score": 0.47191011235955055,
+    "support": 60.0
+  },
+  "rating": {
+    "precision": 0.6814814814814815,
+    "recall": 0.8558139534883721,
+    "f1-score": 0.7587628865979381,
+    "support": 215.0
+  },
+  "others": {
+    "precision": 0.5416666666666666,
+    "recall": 0.22807017543859648,
+    "f1-score": 0.32098765432098764,
+    "support": 57.0
+  },
+  "accuracy": 0.6829268292682927,
+  "macro avg": {
+    "precision": 0.6626027697956577,
+    "recall": 0.547546662483843,
+    "f1-score": 0.5701013981374329,
+    "support": 451.0
+  },
+  "weighted avg": {
+    "precision": 0.6751966061653825,
+    "recall": 0.6829268292682927,
+    "f1-score": 0.6573515996224066,
+    "support": 451.0
+  }
+}

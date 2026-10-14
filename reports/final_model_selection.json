@@ -1,0 +1,8 @@
+{
+  "selected_model": "hybrid",
+  "selection_split": "validation",
+  "selection_metric": "macro_f1",
+  "validation_macro_f1": 0.6719191276206409,
+  "embedding_weight": 0.5,
+  "C": 10.0
+}

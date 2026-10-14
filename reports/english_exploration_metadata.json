@@ -1,0 +1,19 @@
+{
+  "purpose": "Exploratory clustering, not supervised evaluation",
+  "rows": 3000,
+  "selected_k": 5,
+  "silhouette_cosine": 0.08910217136144638,
+  "selection_candidates": [
+    5,
+    8,
+    10
+  ],
+  "language_verified_per_row": false,
+  "notes": [
+    "Silhouette is not classification accuracy.",
+    "Cluster numbers are arbitrary identifiers.",
+    "Topics require inspection of actual reviews.",
+    "Star ratings were not used as topic labels.",
+    "No Arabic training or test data were changed."
+  ]
+}

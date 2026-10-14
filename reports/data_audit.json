@@ -1,0 +1,36 @@
+{
+  "classification": {
+    "original_rows": 2900,
+    "empty_or_missing_label_removed": 0,
+    "conflicting_text_groups": 1,
+    "conflict_rows_excluded": 2,
+    "duplicate_text_rows_removed": 7,
+    "remaining_rows": 2891,
+    "split_counts": {
+      "train": 2050,
+      "test": 451,
+      "validation": 390
+    }
+  },
+  "sentiment": {
+    "original_rows": 29700,
+    "empty_or_missing_label_removed": 0,
+    "conflicting_text_groups": 36,
+    "conflict_rows_excluded": 187,
+    "duplicate_text_rows_removed": 824,
+    "remaining_rows": 28689,
+    "split_counts": {
+      "train": 20094,
+      "test": 4356,
+      "validation": 4239
+    }
+  },
+  "shared_aura_texts_after_cleaning": 858,
+  "english": {
+    "original_rows": 288065,
+    "empty_rows_removed": 12,
+    "duplicate_text_rows_removed": 67714,
+    "exploratory_sample_rows": 3000,
+    "note": "Star ratings are not topic labels. Language not verified per row."
+  }
+}

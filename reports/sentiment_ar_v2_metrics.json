@@ -1,0 +1,17 @@
+{
+  "selection_split": "validation",
+  "train_rows": 20094,
+  "validation_rows": 4239,
+  "test_rows": 4356,
+  "selected_kind": "hybrid",
+  "validation_macro_f1": 0.8720421764288377,
+  "test_metrics": {
+    "accuracy": 0.8652433425160698,
+    "macro_f1": 0.8649142555375856
+  },
+  "interpretation": "Arabic v2 selected on existing validation. Old test has already been inspected; reuse is descriptive, not a fresh independent evaluation. Neutral/mixed unsupported.",
+  "original_baseline_same_test": {
+    "accuracy": 0.859504132231405,
+    "macro_f1": 0.8591705603526969
+  }
+}

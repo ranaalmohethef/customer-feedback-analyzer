@@ -1,0 +1,38 @@
+[
+  {
+    "check": "Arabic single input returns predictions",
+    "passed": true
+  },
+  {
+    "check": "Arabic batch preserves row count",
+    "passed": true
+  },
+  {
+    "check": "Empty input rejected",
+    "passed": true
+  },
+  {
+    "check": "Overlong input rejected",
+    "passed": true
+  },
+  {
+    "check": "English not silently classified as Arabic",
+    "passed": true
+  },
+  {
+    "check": "Mixed-language batch gets clear rejection",
+    "passed": true
+  },
+  {
+    "check": "More than 100 reviews rejected",
+    "passed": true
+  },
+  {
+    "check": "Exploration reports load",
+    "passed": true
+  },
+  {
+    "check": "English semantic search returns ranked results",
+    "passed": true
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "check": "Empty input clears output",
+    "passed": true
+  },
+  {
+    "check": "Long input handled",
+    "passed": true
+  },
+  {
+    "check": "Arabic inference",
+    "passed": true
+  },
+  {
+    "check": "English experimental inference",
+    "passed": true
+  },
+  {
+    "check": "Mixed batch",
+    "passed": true
+  },
+  {
+    "check": "Cluster reports",
+    "passed": true
+  },
+  {
+    "check": "Semantic search",
+    "passed": true
+  }
+]

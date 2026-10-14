@@ -1,0 +1,58 @@
+{
+  "summary": {
+    "evaluation_split": "validation",
+    "encoder": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    "encoder_fine_tuned": false,
+    "max_seq_length": 128,
+    "training_rows": 2050,
+    "validation_rows": 390,
+    "accuracy": 0.6564102564102564,
+    "macro_f1": 0.6019541185062073,
+    "selected_settings": {
+      "C": 10.0,
+      "class_weight": null
+    },
+    "train_encoding_seconds": null,
+    "validation_encoding_seconds": null,
+    "timing_note": "Encoding times exclude model loading. Null means cached embeddings were used."
+  },
+  "per_class": {
+    "bug_report": {
+      "precision": 0.6428571428571429,
+      "recall": 0.6923076923076923,
+      "f1-score": 0.6666666666666666,
+      "support": 104.0
+    },
+    "improvement_request": {
+      "precision": 0.6,
+      "recall": 0.45,
+      "f1-score": 0.5142857142857142,
+      "support": 60.0
+    },
+    "rating": {
+      "precision": 0.7165775401069518,
+      "recall": 0.7486033519553073,
+      "f1-score": 0.73224043715847,
+      "support": 179.0
+    },
+    "others": {
+      "precision": 0.5,
+      "recall": 0.48936170212765956,
+      "f1-score": 0.4946236559139785,
+      "support": 47.0
+    },
+    "accuracy": 0.6564102564102564,
+    "macro avg": {
+      "precision": 0.6148586707410237,
+      "recall": 0.5950681865976648,
+      "f1-score": 0.6019541185062073,
+      "support": 390.0
+    },
+    "weighted avg": {
+      "precision": 0.6528833911186852,
+      "recall": 0.6564102564102564,
+      "f1-score": 0.6525867340251265,
+      "support": 390.0
+    }
+  }
+}
