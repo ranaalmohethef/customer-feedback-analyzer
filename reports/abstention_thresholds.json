@@ -1,0 +1,21 @@
+{
+  "rule": "abstain on the least confident 10% of validation reviews",
+  "selection_split": "validation",
+  "topic": {
+    "threshold": 0.4928,
+    "validation_rows": 390,
+    "abstained_share": 0.1,
+    "accuracy_all": 0.7205,
+    "accuracy_when_answering": 0.7493,
+    "accuracy_on_abstained": 0.4615
+  },
+  "sentiment_ar": {
+    "threshold": 0.5832,
+    "validation_rows": 4239,
+    "abstained_share": 0.1,
+    "accuracy_all": 0.8721,
+    "accuracy_when_answering": 0.9046,
+    "accuracy_on_abstained": 0.5802
+  },
+  "note": "English sentiment has no threshold; it stays experimental."
+}

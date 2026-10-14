@@ -20,11 +20,11 @@
     "passed": true
   },
   {
-    "check": "Result card",
+    "check": "English interface",
     "passed": true
   },
   {
-    "check": "Cluster reports",
+    "check": "Result views (both languages)",
     "passed": true
   },
   {

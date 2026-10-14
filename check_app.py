@@ -45,24 +45,31 @@ def batch():
     assert len(df) == 2 and "ملاحظات" in df.columns and summary
 
 
-def card():
-    assert "card" in app.result_card("تطبيق مفيد")
+def english_ui():
+    t, s, n = app.analyze_one("تطبيق مفيد", "en")
+    assert t in app.TOPIC_NAMES["en"].values() and s in app.SENTIMENT_NAMES["en"].values()
+    assert "Review type" in app.result_card("تطبيق مفيد", "en")
+    df, summary = app.analyze_batch("تطبيق مفيد\nGreat app", "en")
+    assert len(df) == 2 and "Notes" in df.columns
 
 
-def exploration():
-    a, b = app.load_exploration()
-    assert len(a) > 0 and len(b) > 0
+def views():
+    for code in ["ar", "en"]:
+        assert "card" in app.result_card("تطبيق مفيد", code)
+        assert "<table" in app.batch_ui("تطبيق مفيد\nGreat app", code)
+        assert "cluster" in app.clusters_ui(code)
 
 
 def search():
     a, b = app.search_reviews("The app crashes after the update")
     assert len(a) == 5 and b
+    assert "<table" in app.search_ui("The app crashes after the update", "en")
 
 
 for name, fn in [
     ("Empty input", empty), ("Long input", long), ("Arabic inference", arabic),
-    ("English sentiment only", english), ("Mixed batch", batch), ("Result card", card),
-    ("Cluster reports", exploration), ("Semantic search", search),
+    ("English sentiment only", english), ("Mixed batch", batch), ("English interface", english_ui),
+    ("Result views (both languages)", views), ("Semantic search", search),
 ]:
     check(name, fn)
 
